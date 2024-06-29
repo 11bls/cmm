@@ -4,7 +4,6 @@ from youtubesearchpython import VideosSearch
 import os
 import time
 from datetime import datetime
-import requests
 
 TOKEN = '7293032318:AAFAaIOrVT7fwu92LaIjIFhpF1RvyizFW0M'
 OWNER_ID = '6377937320'
@@ -12,19 +11,23 @@ CHANNEL_USERNAME = '@m3rtw2guvence'
 
 bot = telebot.TeleBot(TOKEN)
 
-# Başlangıç komutu işlevi
+print(f"\x1b[1;34m#FREE ALTYAPI BOŞ BİRSEY ZATEN KUMAR BOTU GİBİ SATIŞ YAPMAYA CALIŞAN ELEMANLARIN ANASINI SİKEYİM BOT AKTİF")
+
 @bot.message_handler(commands=['start'])
 def start(message):
     greeting_message = get_greeting_message()
     send_welcome_message(message, greeting_message)
 
-# /indir komutu işlevi
 @bot.message_handler(commands=['indir'])
 def download_music(message):
     query = " ".join(message.text.split()[1:])
     search_and_send_music(bot, message, query)
 
-# Müzik arama ve gönderme işlevi
+@bot.message_handler(commands=['reklam'])
+def send_advertisement(message):
+    if str(message.from_user.id) == OWNER_ID:
+        bot.send_message(message.chat.id, "Owner reklam mesajı")
+
 def search_and_send_music(bot, message, query):
     videosSearch = VideosSearch(query, limit=1)
     result = videosSearch.result()
@@ -49,7 +52,7 @@ def search_and_send_music(bot, message, query):
             bot.delete_message(message.chat.id, search_message.message_id)
 
             with open(path, 'rb') as media:
-                caption = f"✦ Parça: {yt.title}\n\n✦ İsteyen: {message.from_user.username}"
+                caption = f"✦ Parça: {yt.title}\n\n✦ İsteyen: @{message.from_user.username}"
                 bot.send_audio(message.chat.id, media, caption=caption)
 
             os.remove(path)
@@ -58,11 +61,10 @@ def search_and_send_music(bot, message, query):
     else:
         bot.reply_to(message, "İstediğiniz parça bulunamadı 🥲")
 
-# /reklam komutu işlevi
-@bot.message_handler(commands=['reklam'])
-def send_advertisement(message):
-    if str(message.from_user.id) == OWNER_ID:
-        bot.send_message(message.chat.id, "Owner reklam mesajı")
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callback(call):
+    if call.data == "ramazan":
+        bot.send_message(call.message.chat.id, "🍓 Komutlar;\n/start - Botu Başlatır 💓\n/indir - Müzik indirir 🥰")
 
 # Başlangıç mesajını hazırlama işlevi
 def get_greeting_message():
@@ -80,16 +82,10 @@ def get_greeting_message():
 def send_welcome_message(message, greeting_message):
     markup = telebot.types.InlineKeyboardMarkup(row_width=1)
     button1 = telebot.types.InlineKeyboardButton("Sahibim ❤️‍🩹", url="https://t.me/t5omas")
-    button2 = telebot.types.InlineKeyboardButton("Komutlar 💋", callback_data="commands")
+    button2 = telebot.types.InlineKeyboardButton("Komutlar 💋", callback_data="ramazan")
     button3 = telebot.types.InlineKeyboardButton("Kanal 😍", url=CHANNEL_USERNAME)
     markup.add(button1, button2, button3)
     bot.reply_to(message, f"{greeting_message} Ben müzik indirme botuyum, beni tercih ettiğiniz için teşekkür ederim.", reply_markup=markup)
-
-# Callback işlevi
-@bot.callback_query_handler(func=lambda call: True)
-def handle_callback(call):
-    if call.data == "commands":
-        bot.send_message(call.message.chat.id, "🍓 Komutlar;\n/start - Botu Başlatır 💓\n/indir - Müzik indirir 🥰")
 
 # TikTok video indirme işlevi
 @bot.message_handler(func=lambda m: True)
