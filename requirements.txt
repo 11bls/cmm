@@ -1,7 +1,4 @@
-import telebot  # Telegram botu yönetmek için
-from pytube import YouTube  # YouTube videolarını indirmek için
-from youtubesearchpython import VideosSearch  # YouTube'da video aramak için
-import os  # Dosya işlemleri için
-import time  # Zaman ile ilgili işlemler için
-from datetime import datetime  # Tarih ve saat işlemleri için
-import requests  # HTTP istekleri yapmak için
+pytube3
+youtubesearchpython
+telebot
+requests
