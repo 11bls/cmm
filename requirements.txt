@@ -1,4 +1,7 @@
-pytube3==11.0.2
-youtube-search-python==1.4.1
-requests==2.26.0
-telebot==0.0.4
+pytube
+youtubesearchpython
+requests
+telebot
+datetime
+os
+time
