@@ -1,203 +1,132 @@
-import subprocess
-import sys
-
-# Gerekli kütüphanelerin listesini belirle
-required_packages = [
-    "requests",
-    "pytube",
-    "pydub",
-    "python-telegram-bot==13.7"
-]
-
-def install_packages():
-    """Gerekli kütüphaneleri yükler."""
-    for package in required_packages:
-        try:
-            __import__(package.split("==")[0])
-        except ImportError:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-# Kütüphaneleri yükle
-install_packages()
-
-# Kütüphaneleri import et
-import os
-import requests
-import sqlite3
-import sys
+import telebot
 from pytube import YouTube
-from pydub import AudioSegment
-from pydub.playback import play as play_audio
-from telegram import Update, InputFile
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from youtubesearchpython import VideosSearch
+import os
+import time
+from datetime import datetime
+import requests
 
-# Set up your bot token and owner ID here
-BOT_TOKEN = '6552075227:AAECRZ4bBHmzpWlyKuVCKxDhFbpQvneK7Yc'
-OWNER_ID = '6070918315'
+TOKEN = '7293032318:AAFAaIOrVT7fwu92LaIjIFhpF1RvyizFW0M'
+OWNER_ID = '6377937320'
+CHANNEL_USERNAME = '@m3rtw2guvence'
 
-# Define the function to call the Gemini API
-def gemini_api(message):
-    url = "https://dev-the-dark-lord.pantheonsite.io/wp-admin/js/Apis/Gemini.php"
-    params = {"message": message}
-    response = requests.get(url, params=params)
-    return response.text
+bot = telebot.TeleBot(TOKEN)
 
-# Initialize the SQLite database
-conn = sqlite3.connect('users.db', check_same_thread=False)
-c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY)''')
-c.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
-conn.commit()
+# Başlangıç komutu işlevi
+@bot.message_handler(commands=['start'])
+def start(message):
+    greeting_message = get_greeting_message()
+    send_welcome_message(message, greeting_message)
 
-# Handle incoming messages
-def handle_message(update: Update, context: CallbackContext) -> None:
-    user_message = update.message.text
-    response = gemini_api(user_message)
-    update.message.reply_text(response)
+# /indir komutu işlevi
+@bot.message_handler(commands=['indir'])
+def download_music(message):
+    query = " ".join(message.text.split()[1:])
+    search_and_send_music(bot, message, query)
 
-# Add emojis based on keywords
-def add_emojis(message):
-    emoji_map = {
-        "teşekkür": "🙏",
-        "seviyorum": "❤️",
-        "harika": "🎉",
-        "ücretsiz": "🆓",
-        "dikkat": "⚠️",
-        "acil": "🚨",
-    }
-    for key, emoji in emoji_map.items():
-        message = message.replace(key, key + " " + emoji)
-    return message
+# Müzik arama ve gönderme işlevi
+def search_and_send_music(bot, message, query):
+    videosSearch = VideosSearch(query, limit=1)
+    result = videosSearch.result()
 
-# Handle the /reklam command
-def reklam_command(update: Update, context: CallbackContext) -> None:
-    if update.message.from_user.id == int(OWNER_ID):
-        reklam_message = ' '.join(context.args)
-        if reklam_message:
-            reklam_message = add_emojis(reklam_message)
-            c.execute("SELECT id FROM users")
-            users = c.fetchall()
-            for user_id in users:
-                if user_id[0] != int(OWNER_ID):
-                    try:
-                        context.bot.send_message(chat_id=user_id[0], text="Reklam: " + reklam_message)
-                    except Exception as e:
-                        print(f"Could not send message to {user_id[0]}: {e}")
-            update.message.reply_text("Reklam gönderildi!")
-        else:
-            update.message.reply_text("Lütfen geçerli bir reklam mesajı girin.")
-    else:
-        update.message.reply_text("Bu komutu kullanma yetkiniz yok.")
+    if result["result"]:
+        video_url = result["result"][0]["link"]
 
-# Handle the /setimage command to save the image
-def set_image(update: Update, context: CallbackContext) -> None:
-    if update.message.from_user.id == int(OWNER_ID):
-        if update.message.photo:
-            photo_file = update.message.photo[-1].get_file()
-            file_path = photo_file.download()
-            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('start_image', ?)", (file_path,))
-            conn.commit()
-            update.message.reply_text("Resim başarıyla kaydedildi!")
-        else:
-            update.message.reply_text("Lütfen bir resim gönderin.")
-    else:
-        update.message.reply_text("Bu komutu kullanma yetkiniz yok.")
-
-# Handle new user registration
-def register_user(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    c.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
-    conn.commit()
-
-# Handle the /start command
-def start(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    c.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
-    conn.commit()
-
-    c.execute("SELECT value FROM settings WHERE key = 'start_image'")
-    result = c.fetchone()
-    if result:
-        start_image_path = result[0]
-        update.message.reply_photo(photo=open(start_image_path, 'rb'))
-    update.message.reply_text("Merhaba! Benimle konuşarak sorularınızı sorabilirsiniz. Yapımcım @zirvebenimyerim")
-
-# Handle the /updatebot command to update the bot's code
-def update_bot(update: Update, context: CallbackContext) -> None:
-    if update.message.from_user.id == int(OWNER_ID):
-        new_code = ' '.join(context.args)
-        if new_code:
-            with open(__file__, 'w') as file:
-                file.write(new_code)
-            update.message.reply_text("Bot güncellendi! Bot yeniden başlatılıyor...")
-            os.execl(sys.executable, sys.executable, *sys.argv)
-        else:
-            update.message.reply_text("Lütfen geçerli bir kod gönderin.")
-    else:
-        update.message.reply_text("Bu komutu kullanma yetkiniz yok.")
-
-# Handle the /commands command to send the command list to the owner
-def send_commands(update: Update, context: CallbackContext) -> None:
-    if update.message.from_user.id == int(OWNER_ID):
-        commands = [
-            "/start - Başlangıç mesajı ve kayıt",
-            "/reklam - Reklam mesajı gönder",
-            "/setimage - Başlangıç resmi ayarla",
-            "/updatebot - Botun kodunu güncelle",
-            "/commands - Mevcut komutları görüntüle",
-            "/play - YouTube URL'si ile şarkı çal",
-            "/riddle - Rastgele bir bilmece gönder"
-        ]
-        update.message.reply_text("\n".join(commands))
-    else:
-        update.message.reply_text("Bu komutu kullanma yetkiniz yok.")
-
-# Handle the /play command to play a YouTube song
-def play(update: Update, context: CallbackContext) -> None:
-    if update.message.reply_to_message and update.message.reply_to_message.text:
-        url = update.message.reply_to_message.text
         try:
-            yt = YouTube(url)
+            yt = YouTube(video_url)
             stream = yt.streams.filter(only_audio=True).first()
-            file_path = stream.download()
-            audio = AudioSegment.from_file(file_path)
-            play_audio(audio)
-            os.remove(file_path)
-            update.message.reply_text("Şarkı çalınıyor!")
+
+            path = stream.download(output_path=".", filename=yt.title)
+
+            search_message = bot.send_message(message.chat.id, f"🔎 İstediğiniz parça aranıyor...")
+            
+            time.sleep(2)
+            bot.delete_message(message.chat.id, search_message.message_id)
+            
+            search_message = bot.send_message(message.chat.id, f"⏳ İstediğiniz parça indiriliyor.")
+            
+            time.sleep(2)
+            bot.delete_message(message.chat.id, search_message.message_id)
+
+            with open(path, 'rb') as media:
+                caption = f"✦ Parça: {yt.title}\n\n✦ İsteyen: {message.from_user.username}"
+                bot.send_audio(message.chat.id, media, caption=caption)
+
+            os.remove(path)
         except Exception as e:
-            update.message.reply_text(f"Şarkı çalınamadı: {e}")
+            bot.reply_to(message, "İstediğiniz parça bulunamadı 🥲")
     else:
-        update.message.reply_text("Lütfen bir YouTube URL'si içeren mesajı yanıtlayarak komutu kullanın.")
+        bot.reply_to(message, "İstediğiniz parça bulunamadı 🥲")
 
-# Handle the /riddle command to send a random riddle
-def riddle(update: Update, context: CallbackContext) -> None:
-    riddles = [
-        "Ne kadar çok alırsan, bırakması o kadar zor olur? - Nefes",
-        "Sadece bir kez kırılabilir, ancak asla tekrar tamir edilemez. - Güven",
-        "Cevap ne kadar kolay olursa olsun, sorusu her zaman zor olur. - Bilmece"
-    ]
-    riddle = random.choice(riddles)
-    update.message.reply_text(riddle)
+# /reklam komutu işlevi
+@bot.message_handler(commands=['reklam'])
+def send_advertisement(message):
+    if str(message.from_user.id) == OWNER_ID:
+        bot.send_message(message.chat.id, "Owner reklam mesajı")
 
-def main() -> None:
-    updater = Updater(BOT_TOKEN)
-    dispatcher = updater.dispatcher
+# Başlangıç mesajını hazırlama işlevi
+def get_greeting_message():
+    current_hour = datetime.now().hour
+    if 5 <= current_hour < 12:
+        return "Günaydın 🥱"
+    elif 12 <= current_hour < 17:
+        return "İyi öğlenler 🫠"
+    elif 17 <= current_hour < 22:
+        return "İyi akşamlar 🤤"
+    else:
+        return "İyi geceler 😴"
 
-    # Register handlers
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("reklam", reklam_command))
-    dispatcher.add_handler(CommandHandler("setimage", set_image))
-    dispatcher.add_handler(CommandHandler("updatebot", update_bot))
-    dispatcher.add_handler(CommandHandler("commands", send_commands))
-    dispatcher.add_handler(CommandHandler("play", play))
-    dispatcher.add_handler(CommandHandler("riddle", riddle))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, register_user))
-    dispatcher.add_handler(MessageHandler(Filters.photo & Filters.user(user_id=int(OWNER_ID)), set_image))
+# Hoş geldin mesajını gönderme işlevi
+def send_welcome_message(message, greeting_message):
+    markup = telebot.types.InlineKeyboardMarkup(row_width=1)
+    button1 = telebot.types.InlineKeyboardButton("Sahibim ❤️‍🩹", url="https://t.me/t5omas")
+    button2 = telebot.types.InlineKeyboardButton("Komutlar 💋", callback_data="commands")
+    button3 = telebot.types.InlineKeyboardButton("Kanal 😍", url=CHANNEL_USERNAME)
+    markup.add(button1, button2, button3)
+    bot.reply_to(message, f"{greeting_message} Ben müzik indirme botuyum, beni tercih ettiğiniz için teşekkür ederim.", reply_markup=markup)
 
-    # Start the Bot
-    updater.start_polling()
-    updater.idle()
+# Callback işlevi
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callback(call):
+    if call.data == "commands":
+        bot.send_message(call.message.chat.id, "🍓 Komutlar;\n/start - Botu Başlatır 💓\n/indir - Müzik indirir 🥰")
 
-if __name__ == '__main__':
-    main()
+# TikTok video indirme işlevi
+@bot.message_handler(func=lambda m: True)
+def download_tiktok(message):
+    if str(message.from_user.id) == OWNER_ID:
+        link = message.text
+        headers = {
+           'authority': 'api.tikmate.app',
+           'accept': '*/*',
+           'accept-language': 'ar,en;q=0.9,en-GB;q=0.8,en-US;q=0.7',
+           'cache-control': 'no-cache',
+           'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+           'origin': 'https://tikmate.app',
+           'pragma': 'no-cache',
+           'referer': 'https://tikmate.app/',
+           'sec-ch-ua': '"Microsoft Edge";v="105", " Not;A Brand";v="99", "Chromium";v="105"',
+           'sec-ch-ua-mobile': '?0',
+           'sec-ch-ua-platform': '"Windows"',
+           'sec-fetch-dest': 'empty',
+           'sec-fetch-mode': 'cors',
+           'sec-fetch-site': 'same-site',
+           'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36 Edg/105.0.1343.33',
+        }
+
+        data = {
+            'url': f'{link}',
+        }
+
+        req = requests.post('https://api.tikmate.app/api/lookup', headers=headers, data=data,verify=False).json()
+        ok = req['success']
+        if ok == False:
+            bot.reply_to(message,'Hatalı Bağlantı')
+        else:
+            id = req['id']
+            tok = req['token']
+            url = f'https://tikmate.app/download/{tok}/{id}.mp4?hd=1'
+            bot.send_video(message.chat.id,url,reply_to_message_id=message.message_id)
+
+# Bot'u çalıştırma
+bot.polling(none_stop=True)
